@@ -1,0 +1,10 @@
+name = Two factor authentication
+description = Provides the two factor authentication functionality
+package = Everycloud
+version = VERSION
+core = 7.x
+
+; Information added by Drupal.org packaging script on 2019-03-20
+version = "7.65"
+project = "drupal"
+datestamp = "1553100118"

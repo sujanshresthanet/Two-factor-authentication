@@ -1,0 +1,133 @@
+<?php
+/**
+* Implementation of hook_menu()
+*/
+function two_f_auth_menu() {
+  $items = array();
+  $items['verify-login'] = array(
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+    'page callback' => 'verify_login'
+  );
+
+  $items['admin/config/system/two_f_auth'] = array(
+    'title' => 'Two Factor Authentication Setting',
+    'description' => 'Two Factor Authentication settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('two_f_auth_admin_settings'),
+    'access arguments' => array('administer site configuration'),
+  );
+  return $items;
+}
+
+/**
+* Recipient management page
+*/
+function verify_login() {
+  if(isset( $_SESSION['verify_user'])) {
+    return drupal_get_form('verify_login_form');
+  } else {
+    drupal_goto('<front>');
+  }
+}
+
+/**
+* [verify_login_form description]
+* @param  [type] $form    [description]
+* @param  [type] &$fstate [description]
+* @return [type]          [description]
+*/
+function verify_login_form($form, &$fstate) {
+  $form['verify_code']['title'] = array(
+    '#markup' => '<h1>User Verification</h1>',
+  );
+  $form['verify_code']['code'] = array(
+    '#title' => 'Code',
+    '#description' => 'Please enter the confirmation code sent to the email.',
+    '#type' => 'textfield',
+    '#required' => TRUE,
+  );
+  $form['verify_code']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+  return $form;
+}
+
+function verify_login_form_submit($form, &$fstate) {
+  $submitted_code = $fstate['values']['code'];
+  $real_code = $_SESSION['verify_user']['code'];
+  if($submitted_code == $real_code) {
+    $username = $_SESSION['verify_user']['name'];
+    $user_obj = user_load_by_name($username);
+    $form_state = array();
+    $form_state['uid'] = $user_obj->uid;
+    user_login_submit(array(), $form_state);
+    unset($_SESSION['verify_user']);
+    // drupal_goto("user/".$user_obj->uid);
+  } else {
+    drupal_set_message(t('Code does not match'), 'error');
+  }
+}
+
+function two_f_auth_form_alter(&$form, $form_state, $form_id) {
+  if ($form_id == 'user_login_block' || $form_id == 'user_login') {
+    // unset($form['#action']);
+    // $form['actions']['submit']['#submit'][] ='user_login_form_submit';
+  }
+}
+
+function user_login_form_submit(&$form, &$form_state) {
+  $uid = user_authenticate($form_state['values']['name'], $form_state['values']['pass']);
+  if($uid) {
+    $code = mt_rand(1000, 9999);
+    // $code = '1234';
+    $_SESSION['verify_user'] = array(
+      'name' => $form_state['values']['name'],
+      'pass' => $form_state['values']['pass'],
+      'code' => $code,
+    );
+    $to='sujan.shrestha@anchorpoints.com.np';
+    $from='sujan.shrestha@anchorpoints.com.np';
+    $params = array(
+      'body' => 'The code is'.$code,
+      'subject' => 'This is a subject',
+    );
+    $message = drupal_mail('somemodule', 'some_mail_key', $to, language_default(), $params, $from, TRUE);
+    $form_state['redirect'] = 'verify-login';
+  }
+
+}
+
+/**
+* Implements hook_settings().
+*/
+function two_f_auth_admin_settings() {
+  $form['auth_data'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Select user roles'),
+    '#description' => t('The user roles that need need to enter a verification code before login.'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+  $form['auth_data']['#collapsed'] = TRUE;
+  $form['auth_data']['two_f_auth_fontsize']['two_f_auth_users'] = array(
+    '#type' => 'select',
+    '#multiple' => TRUE,
+    '#options' => array(
+      'admin' => t('Admin'),
+      'partner' => t('Partner'),
+    ),
+    '#default_value' => variable_get('two_f_auth_users'),
+    '#required' => TRUE,
+  );
+
+  $form['#submit'][] = 'two_f_auth_admin_settings_submit';
+  return system_settings_form($form);
+}
+/**
+* Submit form data.
+*/
+function two_f_auth_admin_settings_submit($form, &$form_state) {
+  variable_set('two_f_auth_users', $form_state['values']['two_f_auth_users']);
+}
